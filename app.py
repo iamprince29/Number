@@ -10,17 +10,17 @@ app = FastAPI(
 # Hugging Face Access Token
 HF_TOKEN = os.getenv("HF_TOKEN", "")
 
-# Fix 1: Directly HTTPS link use karenge huggingface datasets ka
-# Aggregated parquet structure ke liye direct URL set kar rahe hain
-HF_DATASET_URI = "https://huggingface.co/datasets/Noobster1/Numberdata/resolve/main/*.parquet"
+# HuggingFace Dataset Direct URL (Agar file ka naam kuch aur hai jaise data.parquet, toh yahan change kar lena)
+# Agar multiple files hain toh wildcard allow karne ki command niche add kar di hai
+HF_PARQUET_URL = "https://huggingface.co/datasets/Noobster1/Numberdata/resolve/main/data.parquet"
 
 def get_duckdb_con():
     con = duckdb.connect(database=':memory:')
-    
-    # Fix 2: 'hf' ki jagah reliable 'httpfs' extension use karenge
     con.execute("INSTALL httpfs; LOAD httpfs;")
     
-    # Hugging Face authentication header setup (Agar dataset private hai)
+    # Ye line httpfs ko asterisks (*) allow karne ki permission de degi
+    con.execute("SET allow_asterisks_in_http_paths = true;")
+    
     if HF_TOKEN:
         con.execute(f"SET http_headers={{'Authorization': 'Bearer {HF_TOKEN}'}};")
         
@@ -38,7 +38,7 @@ def search_by_mobile(mobile_no: str):
         
         query = f"""
             SELECT Mobile, name, fname, address, alt, circle, id, email
-            FROM read_parquet('{HF_DATASET_URI}') 
+            FROM read_parquet('{HF_PARQUET_URL}') 
             WHERE CAST(Mobile AS VARCHAR) = ?
             LIMIT 10
         """
@@ -66,7 +66,7 @@ def search_by_name(
         
         query = f"""
             SELECT Mobile, name, fname, address, alt, circle, id, email
-            FROM read_parquet('{HF_DATASET_URI}') 
+            FROM read_parquet('{HF_PARQUET_URL}') 
             WHERE LOWER(name) LIKE LOWER(?)
             LIMIT {limit}
         """
