@@ -4,43 +4,46 @@ from fastapi import FastAPI, HTTPException, Query
 
 app = FastAPI(
     title="Number Data Search API",
-    description="DuckDB + HuggingFace Dataset Powered Search API"
+    description="Optimized DuckDB + HuggingFace Dataset Search API"
 )
 
-# Hugging Face Access Token (Agar repo private hai)
 HF_TOKEN = os.getenv("HF_TOKEN", "")
-
-# Direct path to your parquet file in HF repository
 HF_PARQUET_URL = "https://huggingface.co/datasets/Noobster1/Numberdata/resolve/main/users_data.parquet"
 
-def get_duckdb_con():
-    con = duckdb.connect(database=':memory:')
+def execute_query(query: str, params: list):
+    # Har request ke liye memory limit restricted connection
+    con = duckdb.connect(database=':memory:', read_only=False)
+    
+    # Render Free tier RAM limits
+    con.execute("SET max_memory='384MB';")
+    con.execute("SET threads=1;") 
+    
     con.execute("INSTALL httpfs; LOAD httpfs;")
     
     if HF_TOKEN:
         con.execute(f"SET http_headers={{'Authorization': 'Bearer {HF_TOKEN}'}};")
         
-    return con
+    try:
+        df = con.execute(query, params).df()
+        return df
+    finally:
+        con.close()
 
 @app.get("/")
 def home():
-    return {"message": "API Active! Go to /docs to test endpoints."}
+    return {"message": "API Active & Ready!"}
 
-# 1. Mobile Number Search Endpoint
+# 1. Mobile Search Endpoint
 @app.get("/search/mobile/{mobile_no}")
 def search_by_mobile(mobile_no: str):
     try:
-        con = get_duckdb_con()
-        
         query = f"""
             SELECT Mobile, name, fname, address, alt, circle, id, email
             FROM read_parquet('{HF_PARQUET_URL}') 
             WHERE CAST(Mobile AS VARCHAR) = ?
             LIMIT 10
         """
-        
-        result = con.execute(query, [str(mobile_no)]).df()
-        con.close()
+        result = execute_query(query, [str(mobile_no)])
         
         if result.empty:
             raise HTTPException(status_code=404, detail="Mobile number ke details nahi mile")
@@ -58,17 +61,13 @@ def search_by_name(
     limit: int = Query(10, le=50)
 ):
     try:
-        con = get_duckdb_con()
-        
         query = f"""
             SELECT Mobile, name, fname, address, alt, circle, id, email
             FROM read_parquet('{HF_PARQUET_URL}') 
             WHERE LOWER(name) LIKE LOWER(?)
             LIMIT {limit}
         """
-        
-        result = con.execute(query, [f"%{name}%"]).df()
-        con.close()
+        result = execute_query(query, [f"%{name}%"])
         
         if result.empty:
             raise HTTPException(status_code=404, detail="Name ke details nahi mile")
