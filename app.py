@@ -7,19 +7,15 @@ app = FastAPI(
     description="DuckDB + HuggingFace Dataset Powered Search API"
 )
 
-# Hugging Face Access Token
+# Hugging Face Access Token (Agar repo private hai)
 HF_TOKEN = os.getenv("HF_TOKEN", "")
 
-# HuggingFace Dataset Direct URL (Agar file ka naam kuch aur hai jaise data.parquet, toh yahan change kar lena)
-# Agar multiple files hain toh wildcard allow karne ki command niche add kar di hai
-HF_PARQUET_URL = "https://huggingface.co/datasets/Noobster1/Numberdata/resolve/main/data.parquet"
+# Direct path to your parquet file in HF repository
+HF_PARQUET_URL = "https://huggingface.co/datasets/Noobster1/Numberdata/resolve/main/users_data.parquet"
 
 def get_duckdb_con():
     con = duckdb.connect(database=':memory:')
     con.execute("INSTALL httpfs; LOAD httpfs;")
-    
-    # Ye line httpfs ko asterisks (*) allow karne ki permission de degi
-    con.execute("SET allow_asterisks_in_http_paths = true;")
     
     if HF_TOKEN:
         con.execute(f"SET http_headers={{'Authorization': 'Bearer {HF_TOKEN}'}};")
