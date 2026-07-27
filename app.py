@@ -4,21 +4,25 @@ from fastapi import FastAPI, HTTPException, Query
 
 app = FastAPI(
     title="Number Data Search API",
-    description="Optimized DuckDB + HuggingFace Dataset Search API"
+    description="Optimized DuckDB + Hugging Face Search API"
 )
 
 HF_TOKEN = os.getenv("HF_TOKEN", "")
+# Multi-part parquet direct URL support
 HF_PARQUET_URL = "https://huggingface.co/datasets/Noobster1/Numberdata/resolve/main/users_data.parquet"
 
 def execute_query(query: str, params: list):
-    # Har request ke liye memory limit restricted connection
+    # Har query ke liye clean in-memory db setup
     con = duckdb.connect(database=':memory:', read_only=False)
     
-    # Render Free tier RAM limits
+    # 1. Enforce strict Memory limits for Render Free Tier (512MB RAM)
     con.execute("SET max_memory='384MB';")
-    con.execute("SET threads=1;") 
+    con.execute("SET threads=1;")
     
+    # 2. HTTP & Parquet Memory Tweaks
     con.execute("INSTALL httpfs; LOAD httpfs;")
+    con.execute("SET http_keep_alive=false;")
+    con.execute("SET preserve_insertion_order=false;")
     
     if HF_TOKEN:
         con.execute(f"SET http_headers={{'Authorization': 'Bearer {HF_TOKEN}'}};")
@@ -31,12 +35,12 @@ def execute_query(query: str, params: list):
 
 @app.get("/")
 def home():
-    return {"message": "API Active & Ready!"}
+    return {"status": "ok", "message": "API Active"}
 
-# 1. Mobile Search Endpoint
 @app.get("/search/mobile/{mobile_no}")
 def search_by_mobile(mobile_no: str):
     try:
+        # Avoid scanning unneeded data
         query = f"""
             SELECT Mobile, name, fname, address, alt, circle, id, email
             FROM read_parquet('{HF_PARQUET_URL}') 
@@ -46,7 +50,7 @@ def search_by_mobile(mobile_no: str):
         result = execute_query(query, [str(mobile_no)])
         
         if result.empty:
-            raise HTTPException(status_code=404, detail="Mobile number ke details nahi mile")
+            raise HTTPException(status_code=404, detail="Mobile details not found")
             
         clean_result = result.fillna("").to_dict(orient="records")
         return {"count": len(clean_result), "data": clean_result}
@@ -54,7 +58,6 @@ def search_by_mobile(mobile_no: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-# 2. Name Search Endpoint
 @app.get("/search/name")
 def search_by_name(
     name: str = Query(..., description="Name to search"),
@@ -70,7 +73,7 @@ def search_by_name(
         result = execute_query(query, [f"%{name}%"])
         
         if result.empty:
-            raise HTTPException(status_code=404, detail="Name ke details nahi mile")
+            raise HTTPException(status_code=404, detail="Name details not found")
             
         clean_result = result.fillna("").to_dict(orient="records")
         return {"count": len(clean_result), "data": clean_result}
