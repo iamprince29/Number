@@ -4,7 +4,6 @@ from fastapi import FastAPI, HTTPException, Query
 
 app = FastAPI()
 
-# Environment variable se MotherDuck token retrieve kar rahe hain
 MOTHERDUCK_TOKEN = os.getenv("MOTHERDUCK_TOKEN")
 
 @app.get("/")
@@ -20,17 +19,26 @@ def search_mobile(mobile: str = Query(...)):
         )
         
     try:
-        # MotherDuck se database connect kar rahe hain
         con = duckdb.connect(f"md:my_data?motherduck_token={MOTHERDUCK_TOKEN}")
         
-        # User search query
-        result = con.execute(
-            "SELECT * FROM users WHERE Mobile = ? LIMIT 10", [mobile]
-        ).fetchall()
+        # Clean mobile input
+        clean_mobile = mobile.strip()
+        search_pattern = f"%{clean_mobile}%"
         
+        # Column casting + LIKE query for flexible matching
+        query = """
+            SELECT * FROM my_data.users 
+            WHERE TRY_CAST(Mobile AS VARCHAR) LIKE ? 
+            LIMIT 10
+        """
+        
+        result = con.execute(query, [search_pattern]).fetchall()
         cols = [desc[0] for desc in con.description]
         con.close()
         
+        if not result:
+            return {"status": "success", "count": 0, "message": "Details not found", "data": []}
+            
         return {
             "status": "success", 
             "count": len(result),
