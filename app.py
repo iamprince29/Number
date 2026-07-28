@@ -1,36 +1,37 @@
 import os
 import duckdb
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 
 app = FastAPI()
 
+# Render/VPS environment variable se token uthayega
 MOTHERDUCK_TOKEN = os.getenv("MOTHERDUCK_TOKEN")
-
-def get_db():
-    if not MOTHERDUCK_TOKEN:
-        raise Exception("MOTHERDUCK_TOKEN environment variable missing!")
-    return duckdb.connect(f'md:my_data?token={MOTHERDUCK_TOKEN}')
 
 @app.get("/")
 def home():
     return {"status": "API is Live!"}
 
-@app.get("/search/mobile/{mobile_no}")
-def search_by_mobile(mobile_no: str):
+@app.get("/search")
+def search_mobile(mobile: str = Query(...)):
+    if not MOTHERDUCK_TOKEN:
+        raise HTTPException(status_code=500, detail="MOTHERDUCK_TOKEN environment variable missing")
+        
     try:
-        con = get_db()
-        query = "SELECT Mobile, name, fname, address, alt, circle, id, email FROM users WHERE CAST(Mobile AS VARCHAR) = ? LIMIT 10"
-        result = con.execute(query, [str(mobile_no)]).df()
+        # MotherDuck database se connect karo
+        con = duckdb.connect(f"md:my_data?motherduck_token={MOTHERDUCK_TOKEN}")
+        
+        # Super-fast query chalao
+        result = con.execute(
+            "SELECT * FROM users WHERE Mobile = ? LIMIT 10", [mobile]
+        ).fetchall()
+        
+        cols = [desc[0] for desc in con.description]
         con.close()
         
-        if result.empty:
-            raise HTTPException(status_code=404, detail="No record found")
-            
         return {
-            "status": "success",
-            "count": len(result), 
-            "data": result.fillna("").to_dict(orient="records")
+            "status": "success", 
+            "count": len(result),
+            "data": [dict(zip(cols, row)) for row in result]
         }
-        
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e))'
