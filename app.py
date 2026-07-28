@@ -4,7 +4,7 @@ from fastapi import FastAPI, HTTPException, Query
 
 app = FastAPI()
 
-# Render/VPS environment variable se token uthayega
+# Environment variable se MotherDuck token retrieve kar rahe hain
 MOTHERDUCK_TOKEN = os.getenv("MOTHERDUCK_TOKEN")
 
 @app.get("/")
@@ -14,13 +14,16 @@ def home():
 @app.get("/search")
 def search_mobile(mobile: str = Query(...)):
     if not MOTHERDUCK_TOKEN:
-        raise HTTPException(status_code=500, detail="MOTHERDUCK_TOKEN environment variable missing")
+        raise HTTPException(
+            status_code=500, 
+            detail="MOTHERDUCK_TOKEN environment variable missing"
+        )
         
     try:
-        # MotherDuck database se connect karo
+        # MotherDuck se database connect kar rahe hain
         con = duckdb.connect(f"md:my_data?motherduck_token={MOTHERDUCK_TOKEN}")
         
-        # Super-fast query chalao
+        # User search query
         result = con.execute(
             "SELECT * FROM users WHERE Mobile = ? LIMIT 10", [mobile]
         ).fetchall()
@@ -34,4 +37,4 @@ def search_mobile(mobile: str = Query(...)):
             "data": [dict(zip(cols, row)) for row in result]
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))'
+        raise HTTPException(status_code=500, detail=str(e))
